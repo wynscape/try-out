@@ -3,177 +3,208 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DNA and Genomics</title>
+    <title>Prok and Euk Genome Org & Control/Telomerase</title>
     <style>
-        :root { --bg: #ffffff; --dna: #2d3436; --lag: #0984e3; --gap: #d63031; --gene: #00b894; }
-        * { -webkit-tap-highlight-color: transparent; outline: none; }
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            overflow: hidden; background: var(--bg);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            user-select: none; -webkit-user-select: none;
-        }
-        #stage { width: 100vw; height: 100vh; display: block; cursor: crosshair; }
-        #ui-layer { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
-            padding: 40px 20px; box-sizing: border-box;
-        }
-        .header { text-align: center; }
-        .footer { text-align: center; }
-        h1 { font-size: 14px; font-weight: 400; letter-spacing: 2px; color: #aaa; text-transform: uppercase; margin: 0; }
-        .counter { font-size: 48px; font-weight: 200; color: var(--dna); margin: 10px 0; }
-        .hint { font-size: 12px; color: #ccc; font-style: italic; }
-        /* Security Overlay */
-        #prot { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; pointer-events: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto; }
+        #app { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; user-select: none; -webkit-user-select: none; }
+        
+        .header { text-align: center; margin-top: 25px; line-height: 1.1; }
+        .t-main { font-size: 19px; font-weight: 600; color: #000; letter-spacing: -0.2px; }
+        .t-sub { font-size: 11px; color: rgba(0,0,0,0.2); margin-top: 6px; font-weight: 400; }
+
+        #stage { width: 100%; height: 55%; touch-action: none; margin-top: 20px; }
+        
+        .controls { position: absolute; bottom: 8%; width: 100%; text-align: center; }
+        .btn-minimal { background: #f2f2f2; color: #888; border: none; padding: 14px 60px; border-radius: 8px; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+        .btn-minimal:active { background: #e0e0e0; color: #444; }
+        .btn-minimal:disabled { opacity: 0.3; }
+
+        .counter { font-size: 10px; color: #aaa; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
-<body oncontextmenu="return false;" onkeydown="return false;">
-    <canvas id="stage"></canvas>
-    <div id="ui-layer">
+<body oncontextmenu="return false;">
+
+    <div id="app">
         <div class="header">
-            <h1>Telomere Integrity</h1>
-            <div id="gen" class="counter">50</div>
-            <div id="status" style="font-size: 10px; color: #666;">REPLICATIVE POTENTIAL (BP)</div>
+            <div class="t-main">Prok and Euk Genome & Org</div>
+            <div class="t-main">Telomerase</div>
+            <div class="t-sub">Biology@RI</div>
         </div>
-        <div class="footer">
-            <div class="hint">Tap to trigger mitosis</div>
+
+        <canvas id="stage"></canvas>
+
+        <div class="controls">
+            <div class="counter" id="repeatCounter">Repeats: 0</div>
+            <button class="btn-minimal" id="extendBtn">EXTEND</button>
         </div>
     </div>
-    <div id="prot"></div>
 
     <script>
-        /**
-         * SECURITY FEATURES
-         * 1. Disable Right Click
-         * 2. Disable Common Inspect Keys
-         * 3. Canvas Rendering (Code doesn't exist as DOM elements)
-         */
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && (e.key === 'u' || e.key === 's' || e.key === 'i' || e.key === 'j' || e.key === 'c')) {
-                e.preventDefault(); return false;
-            }
-        });
+    (function(){
+        // Security: Prevent code inspection
+        document.onkeydown = (e) => {
+            if (e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74)) || (e.ctrlKey && e.keyCode == 85)) return false;
+        };
 
         const canvas = document.getElementById('stage');
         const ctx = canvas.getContext('2d');
-        const genEl = document.getElementById('gen');
-        const statusEl = document.getElementById('status');
-
+        const btn = document.getElementById('extendBtn');
+        const counterEl = document.getElementById('repeatCounter');
+        
         let dpr = window.devicePixelRatio || 1;
-        let w, h;
-        let tLen = 0.85; // Initial Telomere Length %
-        let geneEdge = 0.3; // Genes start at 30% width
-        let targetLen = 0.85;
-        let bpRemaining = 50;
+        let w, h, midY;
+        
+        const DNA_THICKNESS = 4;
+        const DNA_GAP = 10; // Bringing lines closer
+        const BASE_SIZE = 8;
+        const REPEAT_WIDTH = 60; // Space for TTAGGG
+        
+        let state = "IDLE"; // IDLE, MOVE, SYNTH, PAUSE, DONE
+        let extension = 0;
+        let repeats = 0;
+        let telomeraseX = -300;
+        let pauseTimer = 0;
+        let currentRepeatInCycle = 0;
 
-        function resize() {
-            w = window.innerWidth;
-            h = window.innerHeight;
-            canvas.width = w * dpr;
-            canvas.height = h * dpr;
+        const baseColors = { 'T': '#FFCC00', 'A': '#FF3B30', 'G': '#4CD964', 'C': '#5AC8FA' };
+        const rnaSeq = "3′-CAAUCCCAAUC-5′";
+
+        function init() {
+            w = canvas.width = window.innerWidth * dpr;
+            h = canvas.height = (window.innerHeight * 0.55) * dpr;
             ctx.scale(dpr, dpr);
+            midY = (h / dpr) / 2;
         }
 
-        window.addEventListener('resize', resize);
-        resize();
-
-        function draw() {
-            // Smooth Interpolation
-            tLen += (targetLen - tLen) * 0.1;
-
-            ctx.clearRect(0, 0, w, h);
-
-            const centerY = h * 0.5;
-            const dnaSpacing = 10;
-            const xStart = 0;
-            const xEnd = w * tLen;
-            const geneX = w * geneEdge;
-
-            // 1. Draw Gene Region (The Danger Zone)
-            ctx.fillStyle = 'rgba(0, 184, 148, 0.05)';
-            ctx.fillRect(0, 0, geneX, h);
-            
+        function drawEnzyme(x, y) {
+            // Lightened grey irregular shape
             ctx.beginPath();
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = '#00b894';
+            ctx.moveTo(x, y);
+            ctx.bezierCurveTo(x-30, y-60, x+80, y-90, x+160, y-50);
+            ctx.bezierCurveTo(x+210, y-20, x+200, y+80, x+120, y+100);
+            ctx.bezierCurveTo(x+50, y+110, x-40, y+80, x-20, y+20);
+            ctx.closePath();
+            ctx.fillStyle = "rgba(220, 220, 220, 0.45)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(100, 100, 100, 0.5)";
             ctx.lineWidth = 1;
-            ctx.moveTo(geneX, 0);
-            ctx.lineTo(geneX, h);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            ctx.save();
-            ctx.translate(geneX - 15, h * 0.8);
-            ctx.rotate(-Math.PI/2);
-            ctx.fillStyle = '#00b894';
-            ctx.font = '10px sans-serif';
-            ctx.fillText("CRITICAL GENE LOCI", 0, 0);
-            ctx.restore();
-
-            // 2. Draw 5' to 3' Leading Strand (Top)
-            ctx.beginPath();
-            ctx.strokeStyle = '#2d3436';
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'round';
-            ctx.moveTo(xStart, centerY - dnaSpacing);
-            ctx.lineTo(xEnd, centerY - dnaSpacing);
             ctx.stroke();
 
-            // 3. Draw 3' to 5' Lagging Strand (Bottom)
-            // Scientifically: Shorter due to RNA Primer removal at the end
-            const laggingEnd = xEnd - (w * 0.04);
-            ctx.beginPath();
-            ctx.strokeStyle = '#0984e3';
-            ctx.moveTo(xStart, centerY + dnaSpacing);
-            ctx.lineTo(laggingEnd, centerY + dnaSpacing);
-            ctx.stroke();
-
-            // 4. Draw The Gap (Visualizing the Problem)
-            ctx.beginPath();
-            ctx.strokeStyle = '#d63031';
-            ctx.setLineDash([2, 4]);
-            ctx.moveTo(laggingEnd, centerY + dnaSpacing);
-            ctx.lineTo(xEnd, centerY + dnaSpacing);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            // Labels
-            ctx.font = '9px sans-serif';
-            ctx.fillStyle = '#aaa';
-            ctx.fillText("5' END", xStart + 10, centerY - 25);
-            ctx.fillText("3' TELOMERE TIP", xEnd - 80, centerY - 25);
+            // RNA Backbone (Purple line with curls)
+            const rnaXStart = x + 10;
+            const rnaXEnd = x + 130;
+            const rnaY = y - 10;
             
-            ctx.fillStyle = '#d63031';
-            ctx.fillText("REPLICATION GAP", laggingEnd, centerY + 25);
+            ctx.beginPath();
+            ctx.strokeStyle = "#8E44AD";
+            ctx.lineWidth = 2;
+            // Left curl
+            ctx.moveTo(rnaXStart - 15, rnaY + 15);
+            ctx.quadraticCurveTo(rnaXStart - 15, rnaY, rnaXStart, rnaY);
+            // Main line
+            ctx.lineTo(rnaXEnd, rnaY);
+            // Right curl
+            ctx.quadraticCurveTo(rnaXEnd + 15, rnaY, rnaXEnd + 15, rnaY + 15);
+            ctx.stroke();
 
-            requestAnimationFrame(draw);
+            // RNA Sequence Text
+            ctx.fillStyle = "#8E44AD";
+            ctx.font = "bold 10px Courier New";
+            ctx.textAlign = "center";
+            ctx.fillText(rnaSeq, x + 70, rnaY - 8);
         }
 
-        function mitosis() {
-            if (bpRemaining > 0) {
-                bpRemaining -= 2;
-                targetLen -= 0.022;
-                genEl.innerText = Math.max(0, bpRemaining);
-                
-                if (bpRemaining <= 10) {
-                    genEl.style.color = '#d63031';
-                    statusEl.innerText = "CRITICAL LENGTH / SENESCENCE NEAR";
-                }
-            } else {
-                statusEl.innerText = "GENETIC INSTABILITY DETECTED";
-                // Add a small shake effect
-                canvas.style.transform = `translate(${Math.random()*4-2}px, ${Math.random()*4-2}px)`;
+        function drawBase(type, x, y) {
+            ctx.fillStyle = baseColors[type] || "#000";
+            ctx.fillRect(x - BASE_SIZE/2, y - BASE_SIZE/2, BASE_SIZE, BASE_SIZE);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+            const startX = 40;
+            const dnaLength = 120;
+            const totalX = startX + dnaLength + extension;
+
+            // 1. Double Stranded DNA (Equal thickness, black)
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = DNA_THICKNESS;
+
+            // Top Strand
+            ctx.beginPath();
+            ctx.moveTo(startX, midY - DNA_GAP);
+            ctx.lineTo(startX + dnaLength, midY - DNA_GAP);
+            ctx.stroke();
+
+            // Bottom Strand (Template being extended)
+            ctx.beginPath();
+            ctx.moveTo(startX, midY + DNA_GAP);
+            ctx.lineTo(totalX, midY + DNA_GAP);
+            ctx.stroke();
+
+            // 2. Interior Textboxes (5' and 3') - Placed in gap
+            ctx.fillStyle = "#000";
+            ctx.font = "bold 9px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("5'", startX + 10, midY + 3);
+            ctx.fillText("3'", startX + dnaLength - 15, midY + 3); // 3' on short strand
+            ctx.fillText("3'", totalX - 10, midY + 3); // Moving 3' on extended strand
+
+            // 3. DNA Bases on Template (Colored Squares)
+            for(let i = 0; i < extension; i += 12) {
+                const pattern = ['T','T','A','G','G','G'];
+                const char = pattern[Math.floor(i/10) % 6];
+                drawBase(char, startX + dnaLength + i, midY + DNA_GAP);
             }
+
+            // 4. State Machine Logic
+            if (state === "MOVE") {
+                let target = totalX - 30;
+                telomeraseX += (target - telomeraseX) * 0.05;
+                if (Math.abs(telomeraseX - target) < 1) state = "SYNTH";
+            } 
+            else if (state === "SYNTH") {
+                extension += 0.4; // 50% speed reduction
+                telomeraseX += 0.4;
+                
+                // Check if one repeat (60px approx) is done
+                if (extension > (currentRepeatInCycle + 1) * REPEAT_WIDTH) {
+                    currentRepeatInCycle++;
+                    repeats++;
+                    counterEl.innerText = `Repeats: ${repeats}`;
+                    state = "PAUSE";
+                    pauseTimer = Date.now();
+                }
+            } 
+            else if (state === "PAUSE") {
+                if (Date.now() - pauseTimer > 2000) {
+                    if (currentRepeatInCycle >= 2) {
+                        state = "IDLE";
+                        btn.disabled = false;
+                    } else {
+                        state = "SYNTH";
+                    }
+                }
+            }
+
+            if (state !== "IDLE") {
+                drawEnzyme(telomeraseX, midY);
+            }
+
+            requestAnimationFrame(render);
         }
 
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            mitosis();
+        btn.addEventListener('click', () => {
+            btn.disabled = true;
+            extension = 0;
+            currentRepeatInCycle = 0;
+            telomeraseX = -200;
+            state = "MOVE";
         });
-        canvas.addEventListener('mousedown', mitosis);
 
-        draw();
+        window.addEventListener('resize', init);
+        init();
+        render();
+    })();
     </script>
 </body>
 </html>
