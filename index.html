@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Endocytosis Interactive</title>
+    <title>Endocytosis | Membrane Dynamics</title>
     <style>
-        :root { --primary: #333; --accent: #007AFF; }
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #fff; color: var(--primary); overflow: hidden; user-select: none; -webkit-user-select: none; }
-        #app { display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: space-between; padding: 20px; box-sizing: border-box; }
-        header { text-align: center; }
-        h1 { font-weight: 300; font-size: 1.5rem; margin-bottom: 5px; letter-spacing: -0.5px; }
-        .controls { width: 100%; max-width: 400px; background: #f8f8f8; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--accent); }
-        .label-group { display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 10px; color: #666; }
-        canvas { flex-grow: 1; width: 100%; max-width: 500px; touch-action: none; }
+        :root { --brand-blue: #007AFF; --text-dark: #333; }
+        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: #ffffff; color: var(--text-dark); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+        #app { display: flex; flex-direction: column; height: 100vh; padding: 20px; box-sizing: border-box; }
+        header { text-align: center; margin-bottom: 10px; }
+        h1 { font-weight: 300; font-size: 1.4rem; margin: 0; }
+        canvas { flex-grow: 1; width: 100%; touch-action: none; border-radius: 8px; }
+        .ui-panel { background: #f9f9f9; padding: 20px; border-radius: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--brand-blue); height: 10px; }
+        .labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: #888; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body oncontextmenu="return false;">
@@ -21,15 +21,14 @@
 <div id="app">
     <header>
         <h1>Endocytosis</h1>
-        <p style="font-size: 0.9rem; color: #888;">Fluid Membrane Dynamics</p>
     </header>
 
-    <canvas id="membraneCanvas"></canvas>
+    <canvas id="stage"></canvas>
 
-    <div class="controls">
-        <input type="range" id="progressSlider" min="0" max="100" value="0">
-        <div class="label-group">
-            <span>Extracellular</span>
+    <div class="ui-panel">
+        <input type="range" id="progress" min="0" max="1" step="0.001" value="0">
+        <div class="labels">
+            <span>Resting</span>
             <span>Invagination</span>
             <span>Vesicle</span>
         </div>
@@ -37,27 +36,19 @@
 </div>
 
 <script>
-/**
- * SECURITY ENFORCEMENT
+/** * SECURITY & ANTI-REVERSE ENGINEERING 
  */
-(function() {
-    document.addEventListener('keydown', e => {
-        if (e.ctrlKey && (e.key === 'u' || e.key === 's' || e.key === 'i' || e.key === 'j')) e.preventDefault();
-    });
-    // Basic anti-copying logic
-    setInterval(() => { if(window.outerHeight - window.innerHeight > 200) { document.body.innerHTML = "Security Protection Enabled."; }}, 1000);
-})();
+document.addEventListener('keydown', e => { if(e.ctrlKey && 'u s i j'.includes(e.key)) e.preventDefault(); });
+setInterval(() => { if(window.outerHeight - window.innerHeight > 160) document.body.innerHTML = ""; }, 500);
 
-/**
- * BIOLOGY SIMULATION
+/** * MEMBRANE PHYSICS 
  */
-const canvas = document.getElementById('membraneCanvas');
+const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
-const slider = document.getElementById('progressSlider');
+const slider = document.getElementById('progress');
 
 let width, height, time = 0;
-const numLipids = 60;
-const lipids = [];
+const LIPID_SPACING = 14; // Constant distance between heads
 
 function resize() {
     width = canvas.width = canvas.clientWidth * window.devicePixelRatio;
@@ -66,76 +57,116 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function drawLipid(x, y, angle) {
+function getMembranePoint(t, progress) {
+    // t ranges from -1 to 1 (left to right)
+    let x = t * (width * 0.6) + (width / 2);
+    let y = height * 0.35;
+    
+    // Smooth wave movement
+    const wave = Math.sin(time + t * 10) * 3;
+    
+    // Endocytosis Math: Transition from line to Omega shape to Circle
+    const influence = Math.exp(-Math.pow(t * 4, 2)); // Bell curve for local deformation
+    
+    if (progress < 0.7) {
+        // Invagination phase
+        y += (progress * 200) * influence;
+    } else {
+        // Vesicle formation & Pinching phase
+        const pinchProg = (progress - 0.7) / 0.3;
+        const centerX = width / 2;
+        const centerY = height * 0.35 + 140;
+        const radius = 50;
+        
+        // Morph the local curve into a circle
+        if (Math.abs(t) < 0.25) {
+            const angle = (t / 0.25) * Math.PI + Math.PI;
+            const targetX = centerX + Math.sin(angle) * radius;
+            const targetY = centerY + Math.cos(angle) * radius;
+            
+            x = x * (1 - pinchProg) + targetX * pinchProg;
+            y = y * (1 - pinchProg) + targetY * pinchProg;
+        }
+        
+        // Heal the top membrane gap
+        if (Math.abs(t) >= 0.25) {
+            const gapFill = Math.sign(t) * (0.25 * (width * 0.6)) * pinchProg;
+            x -= gapFill;
+        }
+    }
+    
+    return { x, y: y + wave, angle: t };
+}
+
+function drawLipid(x, y, angle, isBottom) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
-    
+    if (isBottom) ctx.rotate(Math.PI);
+
     // Head
     ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#444';
+    ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#333';
     ctx.fill();
-    
-    // Tails
+
+    // Tails (Fluid wiggle)
+    const wiggle = Math.sin(time * 2) * 2;
     ctx.beginPath();
-    ctx.moveTo(-2, 5); ctx.lineTo(-2, 15);
-    ctx.moveTo(2, 5); ctx.lineTo(2, 15);
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 1.5;
+    ctx.moveTo(-2, 4); ctx.quadraticCurveTo(-3 + wiggle, 10, -2, 14);
+    ctx.moveTo(2, 4); ctx.quadraticCurveTo(3 + wiggle, 10, 2, 14);
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
     ctx.restore();
 }
 
-function animate() {
+function render() {
     ctx.clearRect(0, 0, width, height);
-    time += 0.05;
-    const progress = slider.value / 100;
-    
-    const centerX = width / 2;
-    const centerY = height / 3;
-    const spacing = width / (numLipids / 2);
+    time += 0.04;
+    const p = parseFloat(slider.value);
 
     // Target Molecule
+    const molY = height * 0.35 + (p * 140);
     ctx.beginPath();
-    ctx.arc(centerX, centerY + (progress * 150), 10, 0, Math.PI * 2);
-    ctx.fillStyle = '#FF3B30';
+    ctx.arc(width/2, molY, 12, 0, Math.PI*2);
+    ctx.fillStyle = "#FF3B30";
     ctx.fill();
 
-    for (let i = 0; i <= numLipids; i++) {
-        let x = i * (width / numLipids);
-        let wave = Math.sin(time + i * 0.3) * 3; // Fluid motion
-        
-        let targetY = centerY;
-        let angle = 0;
+    // Generate Points at constant spatial intervals
+    // We iterate with a high resolution and only draw when we've moved LIPID_SPACING distance
+    let lastX, lastY;
+    let accumulatedDist = 0;
 
-        // Deformation Logic
-        let dist = Math.abs(x - centerX);
-        if (dist < 100) {
-            let indent = Math.cos((dist / 100) * (Math.PI / 2)) * (progress * 180);
-            targetY += indent;
+    for (let t = -1; t <= 1; t += 0.005) {
+        const pt = getMembranePoint(t, p);
+        
+        if (lastX !== undefined) {
+            const d = Math.sqrt((pt.x - lastX)**2 + (pt.y - lastY)**2);
+            accumulatedDist += d;
             
-            // Calculate angle based on curve gradient
-            angle = (x - centerX) * progress * 0.01;
-            
-            // Pinching effect
-            if (progress > 0.8) {
-                let pinch = (progress - 0.8) * 5;
-                if (x < centerX) x += pinch * 20;
-                if (x > centerX) x -= pinch * 20;
+            if (accumulatedDist >= LIPID_SPACING) {
+                // Calculate tangent for rotation
+                const angle = Math.atan2(pt.y - lastY, pt.x - lastX) + Math.PI/2;
+                
+                // Draw Outer Leaflet
+                drawLipid(pt.x, pt.y, angle, false);
+                // Draw Inner Leaflet (offset by width)
+                const offset = 22;
+                drawLipid(pt.x + Math.cos(angle + Math.PI/2) * offset, 
+                          pt.y + Math.sin(angle + Math.PI/2) * offset, angle, true);
+                
+                accumulatedDist = 0;
             }
         }
-
-        // Top Layer
-        drawLipid(x, targetY + wave, angle);
-        // Bottom Layer
-        drawLipid(x, targetY + 25 + wave, angle);
+        lastX = pt.x;
+        lastY = pt.y;
     }
 
-    requestAnimationFrame(animate);
+    requestAnimationFrame(render);
 }
 
-animate();
+render();
 </script>
 </body>
 </html>
