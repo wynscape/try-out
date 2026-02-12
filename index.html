@@ -3,208 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Prok and Euk Genome Org & Control/Telomerase</title>
+    <title>Endocytosis Interactive</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto; }
-        #app { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; user-select: none; -webkit-user-select: none; }
-        
-        .header { text-align: center; margin-top: 25px; line-height: 1.1; }
-        .t-main { font-size: 19px; font-weight: 600; color: #000; letter-spacing: -0.2px; }
-        .t-sub { font-size: 11px; color: rgba(0,0,0,0.2); margin-top: 6px; font-weight: 400; }
-
-        #stage { width: 100%; height: 55%; touch-action: none; margin-top: 20px; }
-        
-        .controls { position: absolute; bottom: 8%; width: 100%; text-align: center; }
-        .btn-minimal { background: #f2f2f2; color: #888; border: none; padding: 14px 60px; border-radius: 8px; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
-        .btn-minimal:active { background: #e0e0e0; color: #444; }
-        .btn-minimal:disabled { opacity: 0.3; }
-
-        .counter { font-size: 10px; color: #aaa; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
+        :root { --primary: #333; --accent: #007AFF; }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #fff; color: var(--primary); overflow: hidden; user-select: none; -webkit-user-select: none; }
+        #app { display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: space-between; padding: 20px; box-sizing: border-box; }
+        header { text-align: center; }
+        h1 { font-weight: 300; font-size: 1.5rem; margin-bottom: 5px; letter-spacing: -0.5px; }
+        .controls { width: 100%; max-width: 400px; background: #f8f8f8; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--accent); }
+        .label-group { display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 10px; color: #666; }
+        canvas { flex-grow: 1; width: 100%; max-width: 500px; touch-action: none; }
     </style>
 </head>
 <body oncontextmenu="return false;">
 
-    <div id="app">
-        <div class="header">
-            <div class="t-main">Prok and Euk Genome & Org</div>
-            <div class="t-main">Telomerase</div>
-            <div class="t-sub">Biology@RI</div>
-        </div>
+<div id="app">
+    <header>
+        <h1>Endocytosis</h1>
+        <p style="font-size: 0.9rem; color: #888;">Fluid Membrane Dynamics</p>
+    </header>
 
-        <canvas id="stage"></canvas>
+    <canvas id="membraneCanvas"></canvas>
 
-        <div class="controls">
-            <div class="counter" id="repeatCounter">Repeats: 0</div>
-            <button class="btn-minimal" id="extendBtn">EXTEND</button>
+    <div class="controls">
+        <input type="range" id="progressSlider" min="0" max="100" value="0">
+        <div class="label-group">
+            <span>Extracellular</span>
+            <span>Invagination</span>
+            <span>Vesicle</span>
         </div>
     </div>
+</div>
 
-    <script>
-    (function(){
-        // Security: Prevent code inspection
-        document.onkeydown = (e) => {
-            if (e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74)) || (e.ctrlKey && e.keyCode == 85)) return false;
-        };
+<script>
+/**
+ * SECURITY ENFORCEMENT
+ */
+(function() {
+    document.addEventListener('keydown', e => {
+        if (e.ctrlKey && (e.key === 'u' || e.key === 's' || e.key === 'i' || e.key === 'j')) e.preventDefault();
+    });
+    // Basic anti-copying logic
+    setInterval(() => { if(window.outerHeight - window.innerHeight > 200) { document.body.innerHTML = "Security Protection Enabled."; }}, 1000);
+})();
 
-        const canvas = document.getElementById('stage');
-        const ctx = canvas.getContext('2d');
-        const btn = document.getElementById('extendBtn');
-        const counterEl = document.getElementById('repeatCounter');
+/**
+ * BIOLOGY SIMULATION
+ */
+const canvas = document.getElementById('membraneCanvas');
+const ctx = canvas.getContext('2d');
+const slider = document.getElementById('progressSlider');
+
+let width, height, time = 0;
+const numLipids = 60;
+const lipids = [];
+
+function resize() {
+    width = canvas.width = canvas.clientWidth * window.devicePixelRatio;
+    height = canvas.height = canvas.clientHeight * window.devicePixelRatio;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function drawLipid(x, y, angle) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    
+    // Head
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#444';
+    ctx.fill();
+    
+    // Tails
+    ctx.beginPath();
+    ctx.moveTo(-2, 5); ctx.lineTo(-2, 15);
+    ctx.moveTo(2, 5); ctx.lineTo(2, 15);
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+}
+
+function animate() {
+    ctx.clearRect(0, 0, width, height);
+    time += 0.05;
+    const progress = slider.value / 100;
+    
+    const centerX = width / 2;
+    const centerY = height / 3;
+    const spacing = width / (numLipids / 2);
+
+    // Target Molecule
+    ctx.beginPath();
+    ctx.arc(centerX, centerY + (progress * 150), 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#FF3B30';
+    ctx.fill();
+
+    for (let i = 0; i <= numLipids; i++) {
+        let x = i * (width / numLipids);
+        let wave = Math.sin(time + i * 0.3) * 3; // Fluid motion
         
-        let dpr = window.devicePixelRatio || 1;
-        let w, h, midY;
-        
-        const DNA_THICKNESS = 4;
-        const DNA_GAP = 10; // Bringing lines closer
-        const BASE_SIZE = 8;
-        const REPEAT_WIDTH = 60; // Space for TTAGGG
-        
-        let state = "IDLE"; // IDLE, MOVE, SYNTH, PAUSE, DONE
-        let extension = 0;
-        let repeats = 0;
-        let telomeraseX = -300;
-        let pauseTimer = 0;
-        let currentRepeatInCycle = 0;
+        let targetY = centerY;
+        let angle = 0;
 
-        const baseColors = { 'T': '#FFCC00', 'A': '#FF3B30', 'G': '#4CD964', 'C': '#5AC8FA' };
-        const rnaSeq = "3′-CAAUCCCAAUC-5′";
-
-        function init() {
-            w = canvas.width = window.innerWidth * dpr;
-            h = canvas.height = (window.innerHeight * 0.55) * dpr;
-            ctx.scale(dpr, dpr);
-            midY = (h / dpr) / 2;
-        }
-
-        function drawEnzyme(x, y) {
-            // Lightened grey irregular shape
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.bezierCurveTo(x-30, y-60, x+80, y-90, x+160, y-50);
-            ctx.bezierCurveTo(x+210, y-20, x+200, y+80, x+120, y+100);
-            ctx.bezierCurveTo(x+50, y+110, x-40, y+80, x-20, y+20);
-            ctx.closePath();
-            ctx.fillStyle = "rgba(220, 220, 220, 0.45)";
-            ctx.fill();
-            ctx.strokeStyle = "rgba(100, 100, 100, 0.5)";
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // RNA Backbone (Purple line with curls)
-            const rnaXStart = x + 10;
-            const rnaXEnd = x + 130;
-            const rnaY = y - 10;
+        // Deformation Logic
+        let dist = Math.abs(x - centerX);
+        if (dist < 100) {
+            let indent = Math.cos((dist / 100) * (Math.PI / 2)) * (progress * 180);
+            targetY += indent;
             
-            ctx.beginPath();
-            ctx.strokeStyle = "#8E44AD";
-            ctx.lineWidth = 2;
-            // Left curl
-            ctx.moveTo(rnaXStart - 15, rnaY + 15);
-            ctx.quadraticCurveTo(rnaXStart - 15, rnaY, rnaXStart, rnaY);
-            // Main line
-            ctx.lineTo(rnaXEnd, rnaY);
-            // Right curl
-            ctx.quadraticCurveTo(rnaXEnd + 15, rnaY, rnaXEnd + 15, rnaY + 15);
-            ctx.stroke();
-
-            // RNA Sequence Text
-            ctx.fillStyle = "#8E44AD";
-            ctx.font = "bold 10px Courier New";
-            ctx.textAlign = "center";
-            ctx.fillText(rnaSeq, x + 70, rnaY - 8);
+            // Calculate angle based on curve gradient
+            angle = (x - centerX) * progress * 0.01;
+            
+            // Pinching effect
+            if (progress > 0.8) {
+                let pinch = (progress - 0.8) * 5;
+                if (x < centerX) x += pinch * 20;
+                if (x > centerX) x -= pinch * 20;
+            }
         }
 
-        function drawBase(type, x, y) {
-            ctx.fillStyle = baseColors[type] || "#000";
-            ctx.fillRect(x - BASE_SIZE/2, y - BASE_SIZE/2, BASE_SIZE, BASE_SIZE);
-        }
+        // Top Layer
+        drawLipid(x, targetY + wave, angle);
+        // Bottom Layer
+        drawLipid(x, targetY + 25 + wave, angle);
+    }
 
-        function render() {
-            ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-            const startX = 40;
-            const dnaLength = 120;
-            const totalX = startX + dnaLength + extension;
+    requestAnimationFrame(animate);
+}
 
-            // 1. Double Stranded DNA (Equal thickness, black)
-            ctx.strokeStyle = "#000";
-            ctx.lineWidth = DNA_THICKNESS;
-
-            // Top Strand
-            ctx.beginPath();
-            ctx.moveTo(startX, midY - DNA_GAP);
-            ctx.lineTo(startX + dnaLength, midY - DNA_GAP);
-            ctx.stroke();
-
-            // Bottom Strand (Template being extended)
-            ctx.beginPath();
-            ctx.moveTo(startX, midY + DNA_GAP);
-            ctx.lineTo(totalX, midY + DNA_GAP);
-            ctx.stroke();
-
-            // 2. Interior Textboxes (5' and 3') - Placed in gap
-            ctx.fillStyle = "#000";
-            ctx.font = "bold 9px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText("5'", startX + 10, midY + 3);
-            ctx.fillText("3'", startX + dnaLength - 15, midY + 3); // 3' on short strand
-            ctx.fillText("3'", totalX - 10, midY + 3); // Moving 3' on extended strand
-
-            // 3. DNA Bases on Template (Colored Squares)
-            for(let i = 0; i < extension; i += 12) {
-                const pattern = ['T','T','A','G','G','G'];
-                const char = pattern[Math.floor(i/10) % 6];
-                drawBase(char, startX + dnaLength + i, midY + DNA_GAP);
-            }
-
-            // 4. State Machine Logic
-            if (state === "MOVE") {
-                let target = totalX - 30;
-                telomeraseX += (target - telomeraseX) * 0.05;
-                if (Math.abs(telomeraseX - target) < 1) state = "SYNTH";
-            } 
-            else if (state === "SYNTH") {
-                extension += 0.4; // 50% speed reduction
-                telomeraseX += 0.4;
-                
-                // Check if one repeat (60px approx) is done
-                if (extension > (currentRepeatInCycle + 1) * REPEAT_WIDTH) {
-                    currentRepeatInCycle++;
-                    repeats++;
-                    counterEl.innerText = `Repeats: ${repeats}`;
-                    state = "PAUSE";
-                    pauseTimer = Date.now();
-                }
-            } 
-            else if (state === "PAUSE") {
-                if (Date.now() - pauseTimer > 2000) {
-                    if (currentRepeatInCycle >= 2) {
-                        state = "IDLE";
-                        btn.disabled = false;
-                    } else {
-                        state = "SYNTH";
-                    }
-                }
-            }
-
-            if (state !== "IDLE") {
-                drawEnzyme(telomeraseX, midY);
-            }
-
-            requestAnimationFrame(render);
-        }
-
-        btn.addEventListener('click', () => {
-            btn.disabled = true;
-            extension = 0;
-            currentRepeatInCycle = 0;
-            telomeraseX = -200;
-            state = "MOVE";
-        });
-
-        window.addEventListener('resize', init);
-        init();
-        render();
-    })();
-    </script>
+animate();
+</script>
 </body>
 </html>
